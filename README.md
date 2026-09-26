@@ -1,0 +1,204 @@
+# AprilTag 平面点选定位工具
+
+第一阶段桌面工具，目标平台为 Ubuntu 24.04 / Python 3.12。打开本地相机图像，检测 AprilTag，建立**去畸变像素 → Z=0 平面毫米坐标**的映射，然后人工点选红、蓝飞镖位置。支持双视图、Shot 编辑与撤销、Session 恢复、CSV/JSON 导出和独立验证点误差报告。
+
+本项目不采集高速相机图像，不接入 ROS、海康 SDK 或雷达，不计算双目外参和三维轨迹。空中点通过本工具得到的是平面映射结果，不能当作真实三维位置。
+
+## Ubuntu 24.04 安装与启动
+
+在本项目根目录运行：
+
+```bash
+sudo apt update
+sudo apt install python3.12-venv python3-pip libgl1 libegl1 libglib2.0-0 \
+    libxkbcommon-x11-0 libxcb-cursor0 libxcb-xinerama0 fonts-noto-cjk
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e '.[test]'
+python -m plane_picker
+```
+
+可选应用配置：
+
+```bash
+python -m plane_picker --config config/app_config.example.yaml
+```
+
+已有环境缺少 `ensurepip` 时，先安装 `python3.12-venv`；也可以使用已安装的 `uv`：
+
+```bash
+uv venv --python python3.12 .venv
+uv pip install --python .venv/bin/python -e '.[test]'
+.venv/bin/python -m plane_picker
+```
+
+`requirements.txt` 声明运行依赖，`requirements.lock` 锁定本次验证的依赖版本。需要复现版本时，在干净的 Python 3.12 虚拟环境中先安装锁定依赖，再安装项目：
+
+```bash
+python -m pip install -r requirements.lock
+python -m pip install --no-deps -e .
+```
+
+AprilTag 默认后端为 `pupil-apriltags`，绑定 AprilTag 3 的 C 检测库，支持 `tagStandard41h12`。Ubuntu x86_64 的 wheel 包含本地库，通常不需要单独安装 `libapriltag`。如果目标架构没有可用 wheel，需要安装 `build-essential cmake` 后从源码构建该绑定。后端缺失或 family 不支持时会明确报错。
+
+## 先运行合成演示
+
+仓库提供 `examples/synthetic/`：四个不同朝向的真实 AprilTag 编码、三个红蓝点、布局、调试内参、平面标定和 Session。启动界面后选择“加载 Session”，打开 `examples/synthetic/session.json`，即可查看左右标记和表格。
+
+演示的相机内参明确标记为 `intrinsics_valid: false`，界面显示调试警告。演示验证报告只验证软件流程，不是实测精度报告。已有示例文件包含生成时的绝对路径；如果复制了项目到另一台机器，请生成新的演示目录：
+
+```bash
+python -m plane_picker.demo /tmp/plane-picker-demo
+```
+
+生成器拒绝覆盖已有演示文件。也可以只打开演示图像，依次加载同目录下的相机参数和布局，点击“检测 AprilTag”“计算映射”，从头走一遍流程。
+
+## 加载外部标定的相机内参
+
+相机内参由外部程序完成标定，本项目不提供内参标定工具。复制 `config/camera_intrinsics.example.yaml` 为自己的配置，填入外部标定结果，再通过界面“相机内参”加载。保留 `CameraModel` 和去畸变计算，因为平面映射仍需要 K、D。
+
+需要填写：
+
+- `image_size: [width, height]`：内参对应的原始图像尺寸，必须与当前图像一致。
+- `camera_matrix`：按行填写 `[[fx, 0, cx], [0, fy, cy], [0, 0, 1]]`，fx/fy/cx/cy 单位为像素。
+- `distortion`：OpenCV 针孔模型参数，常用五项顺序为 `[k1, k2, p1, p2, k3]`；也支持 4/8/12/14 项。请确认外部软件模型和系数顺序，不要直接填入鱼眼模型或另一种排列。
+- `intrinsics_valid: true`：只在替换了全部示例数值、确认是该相机的实测内参后设置。
+- `intrinsics_version`：可省略，让程序根据参数内容计算 SHA-256；参数更新时不要沿用旧内容哈希。
+
+导入的是本项目的普通 YAML 列表格式，不直接解析外部软件特有的 `!!opencv-matrix` 或 ROS `data/rows/cols` 对象；需要先转换。输入使用原始图像，不要将已经去畸变的图片和原始畸变参数组合使用，以免重复校正。图像裁剪、缩放或相机设置改变后必须使用与之匹配的内参。
+
+## 5×5、1 m×1 m 图案的配置
+
+当前检测器、布局解析、Homography 和双视图支持任意数量的 Tag；25 个 Tag 全部可见时最多提供 100 个角点，不需要更换算法。实际使用需将布局中的四个示例 Tag 替换为图案上的 25 个唯一 ID，逐个填写中心坐标和旋转角，并确认实际 family。
+
+**1 m×1 m 是整张图案尺寸，不能单独确定 Tag 检测边长、中心间距或白边。** 需要确认它是纸张尺寸还是有效图案范围，并提供每个 Tag 的检测边长、间距、边距，以及 5×5 的 ID 排列。
+
+若选择图案左下角为原点，等间距阵列可用以下公式生成中心（r 从下往上计数，c 从左往右计数，r/c 为 0–4）：
+
+```text
+X(r,c) = x0 + c * pitch_x_mm
+Y(r,c) = y0 + r * pitch_y_mm
+```
+
+这里 `x0,y0` 是左下 Tag 中心到板左边/下边的距离。仅当 1000 mm 均分为五个 200 mm 的格子、每个 Tag 位于格子正中时，中心才是 100、300、500、700、900 mm；即便如此，单个 Tag 的检测边长也不一定是 200 mm。若 ID 表按图片从上到下排列，则应将表的行索引转换为 `r = 4 - row`。不要未经确认假设 ID 是 0–24 或假设所有 Tag 朝向一致。
+
+有效点击区域继续使用保留内点的凸包，不能直接扩大成整个 1000×1000 mm 外框；外围留白可能不在标定覆盖范围内。更换布局后需重新检测和计算平面标定，旧 H/布局哈希不能沿用。默认网格已为 100 mm，适合该尺寸；RANSAC 阈值由实际角点误差决定，不随 Tag 数量自动放大。
+
+仓库的四 Tag 演示仍是独立的软件验证数据，不代表这张 25 Tag 实物板。确认实物参数后再生成正式布局，避免用猜测的尺寸或 ID 产生错误坐标。
+
+## 坐标系、布局和角点顺序
+
+所有物理坐标内部统一为 mm。平面是 Z=0，+X 向右、+Y 向上；平面视图用 `(X, -Y)` 绘制，以适应屏幕 Y 向下的约定。
+
+`config/tag_layout.example.yaml` 演示四个 Tag 的配置。`center_mm` 是 Tag **中心**，不是边角；`rotation_deg` 是从未旋转印刷方向开始，在物理 +X/+Y 平面内逆时针旋转的角度。`origin_description` 是说明性元数据，不会额外平移坐标。示例的原点是 Tag 0 中心。
+
+检测器的角点顺序固定为未旋转 Tag 的 **左下、右下、右上、左上**。这个顺序由 Tag 编码方向确定，不能按图像上的 x/y 排序。令 `s = tag_size_mm / 2`，对应局部平面坐标为：
+
+```text
+0: (-s, -s)    1: (+s, -s)    2: (+s, +s)    3: (-s, +s)
+plane_corner = rotation_CCW(rotation_deg) @ local_corner + center_mm
+```
+
+该约定与 [AprilTag 3 的 det->p 构造](https://github.com/AprilRobotics/apriltag/blob/master/apriltag.c) 对齐，并由真实 C 检测器在 0°、90°、180°、270° 的测试验证。绑定保留原顺序，不重新排序。将来替换 OpenCV 后端时，必须在适配器中显式转换角点顺序。
+
+`tag_size_mm` 是**检测四边形的边长**，不是打印纸宽度或包含全部白边的图片宽度。`tagStandard41h12` 存在检测边界以外的编码/边界区域；请按所用 Tag 的检测角点间距测量，参见 [AprilTag 官方尺寸定义](https://github.com/AprilRobotics/apriltag#pose-estimation)。打印必须保持比例并保留完整外部图案和留白。
+
+配置加载会拒绝非 mm 单位、非正尺寸、无效 ID、重复 YAML 键、归一化后重复 ID、缺失坐标或旋转角，以及非有限数值。
+
+## 平面标定与点选
+
+1. 打开原始相机图像，加载真实内参和实测 Tag 布局。图像宽高必须与内参严格一致；不自动缩放或裁剪内参。
+2. 点击“检测 AprilTag”。检测使用原始灰度图，在后台执行；显示 Tag ID 和 0–3 号角点。未知 ID 可以显示，但不会参与拟合。重复已知 ID 会使标定失败。
+3. 点击“计算映射”。默认至少 2 个已知 Tag，且至少 8 个最终内点。请让 Tag 分布覆盖整个测量区域，避免集中在一角。
+4. 查看绿色内点、橙色外点、角点数量、像素重投影 RMS 和毫米映射 RMS。点击“保存平面标定”，默认文件名 `plane_calibration.yaml`。
+5. 选择红色或蓝色，在左图有效区域内点击。左右视图和 Shot 表格立即同步；区域外、图像外或投影分母异常时不会创建记录。
+6. 滚轮缩放；空白处拖拽或用中键/右键拖拽平移；“适配两视图”或 `F` 适配内容。“去畸变显示”切换原图和保持同一 K 的校正图。
+
+所有 H 的对应点首先经过 `cv2.undistortPoints(..., P=K)`，仍使用像素单位。原图点击也走同一条路径；去畸变视图点击先转换回原始像素，以便保存两套一致坐标。视口缩放、滚动、居中、黑边由独立 `CoordinateTransform` 处理。Qt 鼠标事件已经是逻辑像素，不能再乘除一次 DPI；物理屏幕像素输入有独立的 DPR 转换入口。
+
+缺少内参时禁止标定。只有显式启用“零畸变调试”或加载标记为无效的示例内参时，才允许调试拟合；警告一直显示，`intrinsics_valid: false` 写入标定和 Session。
+
+### RANSAC 阈值的单位
+
+H 方向始终为 `undistorted_pixels_to_plane_mm`。`cv2.findHomography` 的 RANSAC 阈值采用**目标坐标单位**，因此这里传入 `ransac_threshold_mm`，默认 3 mm。为兼容需求中的像素质量阈值，另保存 `ransac_threshold_px`，默认 3 px，用于逆向平面→图像重投影的额外筛选。两者在应用配置中独立设置，不能视为同一个数值或固定比例换算。
+
+程序检查 H 有限性、条件数、投影分母、非退化对应点、正反向误差、有效区域和投影地平线。有效区域是**保留内点的平面凸包**，不允许外推。加载标定时再次检查对应点、内点掩码、误差记录、凸包、图像尺寸、相机 ID 和布局哈希。误差统计是内点拟合误差，不能代替独立验证。
+
+改变图像、内参、布局或调试模式会使当前映射失效。已有 Shot 时，先保存并“新建本轮”，再更换输入。加载已有 H 只能用于相机位置、焦距、对焦、分辨率和 Tag 平面均未改变的场景；软件无法仅凭相同图像尺寸证明相机未移动。
+
+## Shot 编辑、Session 和导出
+
+- 点选标记或表格行选择 Shot。拖动左图或右侧平面的标记可调整位置；“编辑 / 微调”可以按原始像素以 0.1 px 步长修改位置或颜色。
+- `Delete` 删除选中点；`Ctrl+Z` 撤销添加、移动、改色、删除、清空和重排标签。撤销不会回退 ID 分配器；取消的 ID 不再复用。
+- `shot_id` 与颜色无关。桌面程序在用户应用数据目录（通常 `~/.local/share/plane_picker/shot_ids.sqlite`）保存事务化递增序列，跨本轮、重启和同用户多实例持续递增。加载 Session 会提升序列下界。不同机器独立生成的记录用 `(session_id, shot_id)` 联合识别。
+- “重排显示编号”按颜色重排 R01/R02/B01 等 `shot_label`，**不改变稳定的 shot_id**。初次添加的显示标签使用全局 ID，因此出现 R01、B02、R03 是正常的。
+- “清空本轮”可撤销；“新建本轮”产生新的 session_id、保留当前图像和标定并清除撤销历史。关闭或替换未保存本轮时会提醒。
+- 保存 Session（`Ctrl+S`）需要已完成标定。JSON 保存路径、所有 Shot、下一 ID、版本、标定和布局的完整快照。恢复以快照为准，不依赖外部标定 YAML 仍保持原样；原始图像文件仍须存在。
+- Session 加载先验证所有依赖与 Shot 坐标，再替换当前本轮；失败不会清掉当前数据。相对图像路径按 Session 文件所在目录解析。
+- CSV 含需求中的 13 个字段；JSON 导出包含完整 Session 信息；UI 截图导出 PNG。
+
+标定 YAML 包含相机 ID、原图尺寸、K/D、内参有效性和版本、Tag family、布局路径/哈希、参与 Tag ID、H、有效凸包、两个阈值、内点数、双向 RMS、日期和校验所需的所有对应点/掩码。
+
+## 独立验证点
+
+在平面上布置**独立于拟合 Tag 角点**的已知实测点，制作：
+
+```csv
+point_id,x_mm,y_mm
+V01,100.0,100.0
+V02,250.0,100.0
+V03,100.0,250.0
+```
+
+点击“加载独立验证点”，按横幅顺序在左图点击对应位置。此时点击记录为验证样本，不产生 Shot；“撤销验证点”可以重选上一点。“结束验证”返回 Shot 点选。验证结果显示每点 X/Y 偏差、二维误差，以及平均值、RMS、中位数、P95、最大值；完成后弹窗展示，横幅保留 RMS/P95。点击“导出验证报告”同时生成 CSV 和 JSON，未完成报告在 JSON 中标为 `complete: false`。当前验证结果不写入 Shot Session，请单独导出后再更换标定或关闭。
+
+命令行支持已采集的独立点击 CSV（列 `point_id,u_raw,v_raw`）：
+
+```bash
+python scripts/validate_mapping.py \
+    --calibration plane_calibration.yaml \
+    --points validation_points.csv --clicks validation_clicks.csv \
+    --output validation_report
+```
+
+两张表的 ID 必须一一对应；像素是原图坐标，命令行自动去畸变并检查有效区域。输出 `validation_report.csv` 和 `.json`。二维误差为 `sqrt(error_x_mm² + error_y_mm²)`，汇总的 RMS 为二维误差平方的均值开方。
+
+## 测试与启动检查
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest -q
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m plane_picker --smoke-test
+```
+
+关闭 pytest 外部插件自动加载是为了隔离终端可能已 source 的 ROS/其他项目环境。本项目不依赖这些插件。测试默认使用 Qt offscreen，不需要显示器；`--smoke-test` 不创建全局 ID 数据库。
+
+测试覆盖布局和角点顺序、真实 AprilTag 3 四种朝向、外部内参加载、畸变往返、已知合成矩阵恢复、25 Tag / 100 角点拟合、异常点和无效 H、有效区/分母检查、显示坐标与 DPI、Session 与原图恢复、ID 持久化、可撤销编辑、独立验证统计、真实 Qt 鼠标缩放/拖动/去畸变点选和后台线程。精确几何对应点测试要求恢复误差小于 0.001 mm；包含栅格图像和真实检测器的测试允许亚像素检测带来的误差，两类测试分别解释。
+
+## 模块与扩展边界
+
+```text
+src/plane_picker/
+  camera/        CameraSource、FileCameraSource、HikCameraSource stub
+  calibration/   CameraModel、TagLayout、TagDetector、PlaneMapper、MappingValidator
+  models/        PlaneCalibration、ShotRecord、Session
+  storage/       严格 YAML、原子 Session 保存、CSV、持久 Shot ID
+  service.py     业务状态与可撤销编辑；UI 只调用业务层
+  ui/            双视图、坐标转换、Shot 表格、后台任务和主窗口
+  validation_cli.py / demo.py
+```
+
+每个 `PickerService` 对应一个 camera_id，拥有独立 K、D、H。将来增加 `cam_right` 可建立第二个服务实例。`CameraSource.read()` 返回未经校正的 BGR 图像；海康接入只需实现该接口。检测后端必须遵守 `TagDetector` 的角点契约。未来双目、轨迹或点云模块可以消费 ShotRecord 和带 camera_id 的标定结果；本阶段没有创建这些功能的伪实现。
+
+## 常见问题与当前局限
+
+- **Qt xcb 无法加载**：确认已安装上面的系统库；在正常桌面终端运行。服务器验证用 `QT_QPA_PLATFORM=offscreen`。若终端已有其他 Qt 环境设置，可检查并清除冲突的 `QT_PLUGIN_PATH` / `QT_QPA_PLATFORM_PLUGIN_PATH`；不要混装多个 OpenCV wheel。
+- **中文方框**：安装 `fonts-noto-cjk` 后重新启动程序。
+- **未检测到 Tag**：检查 family、完整外边界、尺寸、清晰度、曝光、反光、遮挡和实际编码方向；检测不依据红蓝颜色。
+- **标定失败或误差大**：检查实测检测边长、中心坐标、逆时针旋转角、镜头内参、输入分辨率和重复 ID。不要仅为通过检查而不断扩大误差阈值。
+- **区域外不能点选**：有效区只覆盖内点凸包。增加分布更广的 Tag，重新标定；不允许靠一个小 Tag 外推大区域。单 Tag 仅在计算核心显式调试参数下可用，桌面流程始终要求至少两个。
+- **Session 图片找不到**：Session 不嵌入图像。恢复原路径，或在 JSON 中同时更新 Session 和各 Shot 的 `image_file`。标定与布局快照不可随意修改。
+- **同色编号不连续**：全局 ID 包含两种颜色和已撤销记录；这是有意保留的唯一身份。需要连续展示时使用“重排显示编号”。
+- 当前只支持 OpenCV 针孔畸变模型，不把鱼眼参数自动解释为普通 distortion。
+- 平面标定不能校正非平面表面、Tag 安装不共面、相机移动、运动模糊或空气中目标的高度误差。
+- 自动测试和演示证明的是计算与交互链路。实际精度仍需使用真实内参、实测 Tag 尺寸/布局以及独立实测验证点确认；没有宣称达到厘米级。

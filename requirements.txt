@@ -1,0 +1,5 @@
+numpy>=1.26
+opencv-python>=4.8
+PySide6>=6.6
+PyYAML>=6.0
+pupil-apriltags>=1.0.4.post11

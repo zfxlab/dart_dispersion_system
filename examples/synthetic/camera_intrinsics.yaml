@@ -1,0 +1,21 @@
+image_size:
+- 1440
+- 1080
+camera_matrix:
+- - 1440.0
+  - 0.0
+  - 720.0
+- - 0.0
+  - 1440.0
+  - 540.0
+- - 0.0
+  - 0.0
+  - 1.0
+distortion:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+intrinsics_valid: false
+intrinsics_version: f0fd8e1a4f5bfea3d7bdf0a5ab00b4dcb284cc587de7cb3e585a6c7dfa46bc0e
