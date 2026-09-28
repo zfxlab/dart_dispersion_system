@@ -1,4 +1,7 @@
-camera_id: cam_left
+camera:
+  # 业务相机标识；图像和内参通过界面从本地文件加载。
+  camera_id: cam_left
+
 # H 的目标是毫米，因此传给 findHomography 的阈值是毫米。
 ransac_threshold_mm: 3.0
 # 对逆向平面→图像重投影的额外像素误差上限。

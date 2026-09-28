@@ -38,7 +38,13 @@ class MainWindow(QMainWindow):
     def __init__(self, config=None, id_allocator=None):
         super().__init__()
         config = config or {}
-        self.service = PickerService(config.get("camera_id", "cam_left"), config.get("ransac_threshold_mm",3.),
+        camera_config = config.get("camera", {})
+        if not isinstance(camera_config, dict):
+            raise ValueError("camera 配置必须是 YAML mapping")
+        camera_id = camera_config.get("camera_id", "cam_left")
+        if not isinstance(camera_id, str) or not camera_id:
+            raise ValueError("camera.camera_id 必须是非空字符串")
+        self.service = PickerService(camera_id, config.get("ransac_threshold_mm",3.),
                                      config.get("ransac_threshold_px",3.),id_allocator)
         self.grid_mm = float(config.get("grid_mm",100.))
         if not 0 < self.grid_mm < 1e9:

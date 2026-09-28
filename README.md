@@ -1,8 +1,8 @@
 # AprilTag 平面点选定位工具
 
-第一阶段桌面工具，目标平台为 Ubuntu 24.04 / Python 3.12。打开本地相机图像，检测 AprilTag，建立**去畸变像素 → Z=0 平面毫米坐标**的映射，然后人工点选红、蓝飞镖位置。支持双视图、Shot 编辑与撤销、Session 恢复、CSV/JSON 导出和独立验证点误差报告。
+桌面工具，目标平台为 Ubuntu 24.04 / Python 3.12。程序从本地文件加载原始图像和相机内参；随后检测 AprilTag，建立**去畸变像素 → Z=0 平面毫米坐标**的映射，并人工点选红、蓝飞镖位置。支持双视图、Shot 编辑与撤销、Session 恢复、CSV/JSON 导出和独立验证点误差报告。
 
-本项目不采集高速相机图像，不接入 ROS、海康 SDK 或雷达，不计算双目外参和三维轨迹。空中点通过本工具得到的是平面映射结果，不能当作真实三维位置。
+本项目不包含相机驱动或实时取流；图像应由采集工具保存后再载入。本项目不计算双目外参和三维轨迹；空中点通过本工具得到的是平面映射结果，不能当作真实三维位置。
 
 ## Ubuntu 24.04 安装与启动
 
@@ -10,35 +10,22 @@
 
 ```bash
 sudo apt update
-sudo apt install python3.12-venv python3-pip libgl1 libegl1 libglib2.0-0 \
+sudo apt install libgl1 libegl1 libglib2.0-0 \
     libxkbcommon-x11-0 libxcb-cursor0 libxcb-xinerama0 fonts-noto-cjk
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e '.[test]'
-python -m plane_picker
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -r requirements.lock
+uv pip install --python .venv/bin/python --no-deps -e .
+uv run --no-sync plane-picker
 ```
 
-可选应用配置：
+应用统一使用一份配置：
 
 ```bash
-python -m plane_picker --config config/app_config.example.yaml
+uv run --no-sync plane-picker --config config/app_config.yaml
 ```
 
-已有环境缺少 `ensurepip` 时，先安装 `python3.12-venv`；也可以使用已安装的 `uv`：
-
-```bash
-uv venv --python python3.12 .venv
-uv pip install --python .venv/bin/python -e '.[test]'
-.venv/bin/python -m plane_picker
-```
-
-`requirements.txt` 声明运行依赖，`requirements.lock` 锁定本次验证的依赖版本。需要复现版本时，在干净的 Python 3.12 虚拟环境中先安装锁定依赖，再安装项目：
-
-```bash
-python -m pip install -r requirements.lock
-python -m pip install --no-deps -e .
-```
+`requirements.lock` 由 uv 生成并锁定本次验证的运行与测试依赖；上面的两条
+`uv pip install` 命令先安装锁定版本，再以 editable 模式安装本项目。
 
 AprilTag 默认后端为 `pupil-apriltags`，绑定 AprilTag 3 的 C 检测库，支持 `tagStandard41h12`。Ubuntu x86_64 的 wheel 包含本地库，通常不需要单独安装 `libapriltag`。如果目标架构没有可用 wheel，需要安装 `build-essential cmake` 后从源码构建该绑定。后端缺失或 family 不支持时会明确报错。
 
@@ -49,39 +36,54 @@ AprilTag 默认后端为 `pupil-apriltags`，绑定 AprilTag 3 的 C 检测库�
 演示的相机内参明确标记为 `intrinsics_valid: false`，界面显示调试警告。演示验证报告只验证软件流程，不是实测精度报告。已有示例文件包含生成时的绝对路径；如果复制了项目到另一台机器，请生成新的演示目录：
 
 ```bash
-python -m plane_picker.demo /tmp/plane-picker-demo
+uv run --no-sync python -m plane_picker.demo /tmp/plane-picker-demo
 ```
 
 生成器拒绝覆盖已有演示文件。也可以只打开演示图像，依次加载同目录下的相机参数和布局，点击“检测 AprilTag”“计算映射”，从头走一遍流程。
 
 ## 加载外部标定的相机内参
 
-相机内参由外部程序完成标定，本项目不提供内参标定工具。复制 `config/camera_intrinsics.example.yaml` 为自己的配置，填入外部标定结果，再通过界面“相机内参”加载。保留 `CameraModel` 和去畸变计算，因为平面映射仍需要 K、D。
+相机内参由外部程序完成标定，本项目不提供内参标定工具。内参 YAML 格式参考
+`config/calibration/00DA1923282.yaml`，然后通过界面“相机内参”加载。程序保留
+`CameraModel` 和去畸变计算，因为平面映射仍需要 K、D。
+
+`00DA1923282.yaml` 中的参数是按镜头、物距和像元尺寸计算的暂定示例，并假设零畸变，
+只用于展示格式和联调；正式测量应替换为该相机在实际分辨率、镜头和对焦状态下的实测标定。
 
 需要填写：
 
-- `image_size: [width, height]`：内参对应的原始图像尺寸，必须与当前图像一致。
-- `camera_matrix`：按行填写 `[[fx, 0, cx], [0, fy, cy], [0, 0, 1]]`，fx/fy/cx/cy 单位为像素。
-- `distortion`：OpenCV 针孔模型参数，常用五项顺序为 `[k1, k2, p1, p2, k3]`；也支持 4/8/12/14 项。请确认外部软件模型和系数顺序，不要直接填入鱼眼模型或另一种排列。
-- `intrinsics_valid: true`：只在替换了全部示例数值、确认是该相机的实测内参后设置。
-- `intrinsics_version`：可省略，让程序根据参数内容计算 SHA-256；参数更新时不要沿用旧内容哈希。
+- `image_width/image_height`：内参对应的原始图像尺寸，必须与当前图像一致。
+- `camera_matrix.data`：按行展开的 3×3 K，fx/fy/cx/cy 单位为像素。
+- `distortion_model`：支持 `plumb_bob` 和 `rational_polynomial`，不接受鱼眼 `equidistant`。
+- `distortion_coefficients.data`：`plumb_bob` 为 4/5 项，常用顺序是
+  `[k1, k2, p1, p2, k3]`；`rational_polynomial` 为 8 项。
+- `rectification_matrix` 和 `projection_matrix`：填写 3×3 R 和 3×4 P；普通单目内参可分别使用单位矩阵和由 K 扩展的投影矩阵。
 
-导入的是本项目的普通 YAML 列表格式，不直接解析外部软件特有的 `!!opencv-matrix` 或 ROS `data/rows/cols` 对象；需要先转换。输入使用原始图像，不要将已经去畸变的图片和原始畸变参数组合使用，以免重复校正。图像裁剪、缩放或相机设置改变后必须使用与之匹配的内参。
+程序会根据 K、D 和分辨率生成一致的内参版本哈希。
+输入必须使用原始图像，不要把已经去畸变的图片与原始畸变参数组合使用。图像裁剪、缩放、
+对焦或相机设置改变后，必须重新生成匹配的内参。
 
 ## 5×5、1 m×1 m 图案的配置
 
-当前检测器、布局解析、Homography 和双视图支持任意数量的 Tag；25 个 Tag 全部可见时最多提供 100 个角点，不需要更换算法。实际使用需将布局中的四个示例 Tag 替换为图案上的 25 个唯一 ID，逐个填写中心坐标和旋转角，并确认实际 family。
+当前实物板的完整布局保存在 `config/tag_layout.yaml`。识别到的 family 是 `tag36h11`，
+ID 按照片从上到下为 `7–11、22–26、37–41、52–56、67–71`。照片中的所有 Tag 相对其
+编码正向旋转了 180°；布局坐标系已经随整块板旋转 180°，因此以 Tag 正确朝向观察时，
+所有条目的 `rotation_deg` 都是 `0`。
 
-**1 m×1 m 是整张图案尺寸，不能单独确定 Tag 检测边长、中心间距或白边。** 需要确认它是纸张尺寸还是有效图案范围，并提供每个 Tag 的检测边长、间距、边距，以及 5×5 的 ID 排列。
+实测 Tag 检测边长为 168 mm，相邻 Tag 黑色边缘间距为 40 mm，因此中心距为 208 mm。
+5 个 Tag 加 4 个间隙正好覆盖 1000 mm：`5×168 + 4×40 = 1000`。以阵列左下边缘为
+原点，各行列中心坐标为 `84、292、500、708、916 mm`。
 
-若选择图案左下角为原点，等间距阵列可用以下公式生成中心（r 从下往上计数，c 从左往右计数，r/c 为 0–4）：
+布局以“所有 Tag 编码正向朝上时”的板左下角为原点。等间距阵列中心为（r 从下往上计数，
+c 从左往右计数，r/c 为 0–4）：
 
 ```text
 X(r,c) = x0 + c * pitch_x_mm
 Y(r,c) = y0 + r * pitch_y_mm
 ```
 
-这里 `x0,y0` 是左下 Tag 中心到板左边/下边的距离。仅当 1000 mm 均分为五个 200 mm 的格子、每个 Tag 位于格子正中时，中心才是 100、300、500、700、900 mm；即便如此，单个 Tag 的检测边长也不一定是 200 mm。若 ID 表按图片从上到下排列，则应将表的行索引转换为 `r = 4 - row`。不要未经确认假设 ID 是 0–24 或假设所有 Tag 朝向一致。
+这里 `x0=y0=84 mm`、`pitch_x=pitch_y=208 mm`。由于布局方向与当前照片相反，照片右上角
+的 ID 11 是布局左下角第一个 Tag；照片左下角的 ID 67 是布局右上角最后一个 Tag。
 
 有效点击区域继续使用保留内点的凸包，不能直接扩大成整个 1000×1000 mm 外框；外围留白可能不在标定覆盖范围内。更换布局后需重新检测和计算平面标定，旧 H/布局哈希不能沿用。默认网格已为 100 mm，适合该尺寸；RANSAC 阈值由实际角点误差决定，不随 Tag 数量自动放大。
 
@@ -91,7 +93,9 @@ Y(r,c) = y0 + r * pitch_y_mm
 
 所有物理坐标内部统一为 mm。平面是 Z=0，+X 向右、+Y 向上；平面视图用 `(X, -Y)` 绘制，以适应屏幕 Y 向下的约定。
 
-`config/tag_layout.example.yaml` 演示四个 Tag 的配置。`center_mm` 是 Tag **中心**，不是边角；`rotation_deg` 是从未旋转印刷方向开始，在物理 +X/+Y 平面内逆时针旋转的角度。`origin_description` 是说明性元数据，不会额外平移坐标。示例的原点是 Tag 0 中心。
+`config/tag_layout.yaml` 是当前 5×5 实物板布局。`center_mm` 是 Tag **中心**，不是边角；
+`rotation_deg` 是从未旋转印刷方向开始，在物理 +X/+Y 平面内逆时针旋转的角度。
+`origin_description` 是说明性元数据，不会额外平移坐标。
 
 检测器的角点顺序固定为未旋转 Tag 的 **左下、右下、右上、左上**。这个顺序由 Tag 编码方向确定，不能按图像上的 x/y 排序。令 `s = tag_size_mm / 2`，对应局部平面坐标为：
 
@@ -156,7 +160,7 @@ V03,100.0,250.0
 命令行支持已采集的独立点击 CSV（列 `point_id,u_raw,v_raw`）：
 
 ```bash
-python scripts/validate_mapping.py \
+uv run --no-sync python scripts/validate_mapping.py \
     --calibration plane_calibration.yaml \
     --points validation_points.csv --clicks validation_clicks.csv \
     --output validation_report
@@ -167,11 +171,11 @@ python scripts/validate_mapping.py \
 ## 测试与启动检查
 
 ```bash
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest -q
-QT_QPA_PLATFORM=offscreen .venv/bin/python -m plane_picker --smoke-test
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-sync pytest -q
+QT_QPA_PLATFORM=offscreen uv run --no-sync plane-picker --smoke-test
 ```
 
-关闭 pytest 外部插件自动加载是为了隔离终端可能已 source 的 ROS/其他项目环境。本项目不依赖这些插件。测试默认使用 Qt offscreen，不需要显示器；`--smoke-test` 不创建全局 ID 数据库。
+关闭 pytest 外部插件自动加载是为了隔离终端中的其他 Python 项目环境。本项目不依赖这些插件。测试默认使用 Qt offscreen，不需要显示器；`--smoke-test` 不创建全局 ID 数据库。
 
 测试覆盖布局和角点顺序、真实 AprilTag 3 四种朝向、外部内参加载、畸变往返、已知合成矩阵恢复、25 Tag / 100 角点拟合、异常点和无效 H、有效区/分母检查、显示坐标与 DPI、Session 与原图恢复、ID 持久化、可撤销编辑、独立验证统计、真实 Qt 鼠标缩放/拖动/去畸变点选和后台线程。精确几何对应点测试要求恢复误差小于 0.001 mm；包含栅格图像和真实检测器的测试允许亚像素检测带来的误差，两类测试分别解释。
 
@@ -179,7 +183,7 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m plane_picker --smoke-test
 
 ```text
 src/plane_picker/
-  camera/        CameraSource、FileCameraSource、HikCameraSource stub
+  camera/        本地图像文件源
   calibration/   CameraModel、TagLayout、TagDetector、PlaneMapper、MappingValidator
   models/        PlaneCalibration、ShotRecord、Session
   storage/       严格 YAML、原子 Session 保存、CSV、持久 Shot ID
@@ -188,7 +192,7 @@ src/plane_picker/
   validation_cli.py / demo.py
 ```
 
-每个 `PickerService` 对应一个 camera_id，拥有独立 K、D、H。将来增加 `cam_right` 可建立第二个服务实例。`CameraSource.read()` 返回未经校正的 BGR 图像；海康接入只需实现该接口。检测后端必须遵守 `TagDetector` 的角点契约。未来双目、轨迹或点云模块可以消费 ShotRecord 和带 camera_id 的标定结果；本阶段没有创建这些功能的伪实现。
+每个 `PickerService` 对应一个 camera_id，拥有独立 K、D、H。文件源返回未经校正的 BGR 图像；检测后端必须遵守 `TagDetector` 的角点契约。未来双目、轨迹或点云模块可以消费 ShotRecord 和带 camera_id 的标定结果。
 
 ## 常见问题与当前局限
 

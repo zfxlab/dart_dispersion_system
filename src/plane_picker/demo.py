@@ -52,7 +52,7 @@ def generate(directory):
     layout = TagLayout("tagStandard41h12",100.,tags,"tag_0_center")
     write_yaml(targets[1],layout.to_dict())
     camera = CameraModel.debug((1440,1080))
-    write_yaml(targets[2],camera.to_dict())
+    write_yaml(targets[2],camera.to_intrinsics_dict("synthetic_camera", include_validity=True))
     points = [[150.,150.],[300.,200.],[220.,350.]]
     for p,color in zip(points,[(0,0,255),(255,0,0),(0,0,255)]):
         q = np.round(origin+np.asarray(p)*[scale,-scale]).astype(int)

@@ -19,7 +19,8 @@ def main(argv=None):
     app.setStyleSheet("QMainWindow, QWidget { font-size: 13px; } QToolBar { spacing: 5px; padding: 4px; }")
     allocator = None if args.smoke_test else ShotIdAllocator(
         Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)) / "shot_ids.sqlite")
-    window = MainWindow(read_yaml(args.config) if args.config else None,allocator)
+    config = read_yaml(args.config) if args.config else None
+    window = MainWindow(config,allocator)
     window.show()
     if args.smoke_test:
         QTimer.singleShot(400,app.quit)
