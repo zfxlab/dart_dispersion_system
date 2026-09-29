@@ -5,80 +5,80 @@ origin_description: board_lower_left_when_tags_are_upright; +X right, +Y up
 tags:
   11:
     center_mm: [84.0, 84.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   10:
     center_mm: [292.0, 84.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   9:
     center_mm: [500.0, 84.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   8:
     center_mm: [708.0, 84.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   7:
     center_mm: [916.0, 84.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
 
   26:
     center_mm: [84.0, 292.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   25:
     center_mm: [292.0, 292.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   24:
     center_mm: [500.0, 292.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   23:
     center_mm: [708.0, 292.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   22:
     center_mm: [916.0, 292.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
 
   41:
     center_mm: [84.0, 500.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   40:
     center_mm: [292.0, 500.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   39:
     center_mm: [500.0, 500.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   38:
     center_mm: [708.0, 500.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   37:
     center_mm: [916.0, 500.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
 
   56:
     center_mm: [84.0, 708.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   55:
     center_mm: [292.0, 708.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   54:
     center_mm: [500.0, 708.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   53:
     center_mm: [708.0, 708.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   52:
     center_mm: [916.0, 708.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
 
   71:
     center_mm: [84.0, 916.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   70:
     center_mm: [292.0, 916.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   69:
     center_mm: [500.0, 916.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   68:
     center_mm: [708.0, 916.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0
   67:
     center_mm: [916.0, 916.0]
-    rotation_deg: 0.0
+    rotation_deg: 180.0

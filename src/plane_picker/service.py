@@ -60,6 +60,35 @@ class PickerService:
         if self.camera and self.camera.image_size != (image.shape[1], image.shape[0]):
             self.camera = None
 
+    def open_selection_image(self, path):
+        """Open a picking image while keeping the fixed-camera mapping."""
+        self.require_empty()
+        if self.mapper is None or self.camera is None:
+            raise ValueError("请先使用 AprilTag 标定照片完成标定")
+        source = FileCameraSource(path, self.session.camera_id)
+        image = source.read()
+        self.camera.check_size((image.shape[1], image.shape[0]))
+        self.image = image
+        self.session.image_file = source.path
+        self.detections = []
+        self.history.clear()
+
+    def calibrate(self):
+        """Detect AprilTags and calculate the mapping as one UI operation."""
+        self.require_empty()
+        detections = self.detect()
+        if not detections:
+            raise ValueError("未检测到 AprilTag。请检查 family、清晰度和完整白边")
+        if self.image is None or self.camera is None or self.layout is None:
+            raise ValueError("请加载标定照片、相机内参和 Tag 布局")
+        self.camera.check_size((self.image.shape[1], self.image.shape[0]))
+        mapper = PlaneMapper.fit(
+            detections, self.layout, self.camera, self.session.camera_id,
+            ransac_threshold_mm=self.ransac_threshold_mm,
+            ransac_threshold_px=self.ransac_threshold_px,
+        )
+        return detections, mapper
+
     def load_camera(self, path):
         self.require_empty()
         camera = CameraModel.load(path)

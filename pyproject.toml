@@ -15,6 +15,7 @@ test = ["pytest>=8"]
 [project.scripts]
 plane-picker = "plane_picker.app:main"
 validate-mapping = "plane_picker.validation_cli:main"
+plane-trajectory = "plane_picker.trajectory_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

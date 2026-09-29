@@ -19,7 +19,7 @@ def test_physical_5x5_layout_uses_canonical_tag_direction():
     assert len(layout.tags) == 25
     assert layout.tags[11]["center_mm"] == [84.0, 84.0]
     assert layout.tags[67]["center_mm"] == [916.0, 916.0]
-    assert {tag["rotation_deg"] for tag in layout.tags.values()} == {0.0}
+    assert {tag["rotation_deg"] for tag in layout.tags.values()} == {180.0}
 
 
 def test_reference_intrinsics_yaml():

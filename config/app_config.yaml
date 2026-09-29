@@ -3,7 +3,12 @@ camera:
   camera_id: cam_left
 
 # H 的目标是毫米，因此传给 findHomography 的阈值是毫米。
-ransac_threshold_mm: 3.0
+ransac_threshold_mm: 8.0
 # 对逆向平面→图像重投影的额外像素误差上限。
-ransac_threshold_px: 3.0
+ransac_threshold_px: 4.0
 grid_mm: 100.0
+
+# 结果页默认值；修改后会保存到项目 results.json。
+impact_radius_mm: 10.0
+# 标定平面到实际发射方向坐标的逆时针旋转角。
+result_rotation_deg: 0.0

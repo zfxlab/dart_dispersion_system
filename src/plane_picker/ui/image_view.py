@@ -3,6 +3,7 @@ from PySide6.QtGui import QColor, QImage, QPixmap, QPen, QBrush, QPolygonF, QPai
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsItem
 import numpy as np
 
+from ..calibration.homography import project
 from .coordinate_transform import CoordinateTransform
 
 
@@ -30,6 +31,10 @@ class NavigableView(QGraphicsView):
         self._shot = None
         self._button = None
         self._dragged = False
+        self._point_editing_enabled = True
+
+    def set_point_editing_enabled(self, enabled):
+        self._point_editing_enabled = bool(enabled)
 
     def scene_point(self, pos):
         # viewportTransform includes centering, letterboxes, scrollbars and zoom.
@@ -49,7 +54,11 @@ class NavigableView(QGraphicsView):
         self._button = event.button()
         self._dragged = False
         item = self.itemAt(event.position().toPoint())
-        self._shot = item.data(0) if item is not None else None
+        self._shot = (
+            item.data(0)
+            if self._point_editing_enabled and item is not None
+            else None
+        )
         if self._shot is not None and self._button == Qt.MouseButton.LeftButton:
             self.selected.emit(int(self._shot))
         event.accept()
@@ -95,7 +104,7 @@ class NavigableView(QGraphicsView):
             item.setData(0, shot_id)
         return item
 
-    def marker(self, xy, color, text, shot_id=None, selected=False):
+    def marker(self, xy, color, text, shot_id=None, selected=False, show_label=True):
         x,y = map(float, xy)
         item = self.scene().addEllipse(-5,-5,10,10, pen("#ffffff" if selected else color, 2), QBrush(QColor(color)))
         item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
@@ -103,8 +112,10 @@ class NavigableView(QGraphicsView):
         item.setZValue(4)
         if shot_id is not None:
             item.setData(0, shot_id)
-        label = self.label(text, x, y, color, shot_id)
-        label.setZValue(5)
+        if show_label:
+            label = self.label(text, x, y, color, shot_id)
+            label.setZValue(5)
+        return item
 
 
 class ImageView(NavigableView):
@@ -127,6 +138,19 @@ class ImageView(NavigableView):
         for item in self.scene().items():
             if item is not self._image_item:
                 self.scene().removeItem(item)
+
+    def draw_valid_region(self, mapper, undistorted=False):
+        """Draw the accepted plane polygon in the current image coordinates."""
+        if mapper is None:
+            return
+        corners_undistorted = project(np.linalg.inv(mapper.h), mapper.polygon)
+        corners = (
+            corners_undistorted
+            if undistorted
+            else mapper.camera.distort(corners_undistorted)
+        )
+        item = self.polygon(corners, "#43d69a")
+        item.setZValue(2)
 
     def draw_tags(self, detections, mapper, undistorted=False):
         mask = {}

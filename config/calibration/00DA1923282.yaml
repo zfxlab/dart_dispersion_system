@@ -1,33 +1,35 @@
-# Provisional calibration: 35 mm lens focused at 25 m, with a 3.45 um pixel size.
-# Theoretical focal length: (35 mm * 25000 mm / (25000 mm - 35 mm)) / 0.00345 mm.
-# Principal point: center of the pixel-center coordinates (0..1439, 0..1079).
-# Distortion is assumed to be zero pending a more precise calibration.
 image_width: 1440
 image_height: 1080
 camera_name: camera
-# prettier-ignore
+
 camera_matrix:
   rows: 3
   cols: 3
-  data: [10159.150346717288, 0.0, 719.5,
-         0.0, 10159.150346717288, 539.5,
+  data: [2366.3410233741492, 0.0, 690.6097183430506,
+         0.0, 2364.594015535265, 564.5520301536088,
          0.0, 0.0, 1.0]
+
 distortion_model: plumb_bob
+
 distortion_coefficients:
   rows: 1
   cols: 5
-  data: [0.0, 0.0, 0.0, 0.0, 0.0]
-# prettier-ignore
+  data: [-0.07918798645301385,
+         0.3343182988170174,
+         0.0011750137754470546,
+         0.00019297264757463565,
+         0.0]
+
 rectification_matrix:
   rows: 3
   cols: 3
   data: [1.0, 0.0, 0.0,
          0.0, 1.0, 0.0,
          0.0, 0.0, 1.0]
-# prettier-ignore
+
 projection_matrix:
   rows: 3
   cols: 4
-  data: [10159.150346717288, 0.0, 719.5, 0.0,
-         0.0, 10159.150346717288, 539.5, 0.0,
+  data: [2355.32763671875, 0.0, 690.362463065554, 0.0,
+         0.0, 2354.561279296875, 564.5817415078673, 0.0,
          0.0, 0.0, 1.0, 0.0]

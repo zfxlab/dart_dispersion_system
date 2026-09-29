@@ -84,6 +84,27 @@ def test_invalidates_context(service,tmp_path):
     assert not s.history
 
 
+def test_selection_image_keeps_fixed_camera_mapping(service,tmp_path):
+    s,_ = service
+    mapper = s.mapper
+    calibration_id = s.session.calibration_id
+    target = tmp_path/"待选点.png"
+    cv2.imwrite(str(target),np.full((1080,1440,3),80,np.uint8))
+
+    s.open_selection_image(target)
+
+    assert s.mapper is mapper
+    assert s.session.calibration_id == calibration_id
+    assert s.session.image_file == str(target.resolve())
+    assert not s.detections
+
+    wrong_size = tmp_path/"错误尺寸.png"
+    cv2.imwrite(str(wrong_size),np.zeros((100,100,3),np.uint8))
+    with pytest.raises(ValueError,match="尺寸"):
+        s.open_selection_image(wrong_size)
+    assert s.session.image_file == str(target.resolve())
+
+
 def test_independent_validation(tmp_path):
     v = MappingValidator([dict(point_id="a",x_mm=0.,y_mm=0.),dict(point_id="b",x_mm=10.,y_mm=10.)],"cal")
     v.add([3,4])

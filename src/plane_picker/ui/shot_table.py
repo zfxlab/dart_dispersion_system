@@ -6,11 +6,13 @@ class ShotTable(QTableWidget):
     selected = Signal(int)
 
     def __init__(self):
-        super().__init__(0, 6)
-        self.setHorizontalHeaderLabels(["shot_id", "标签", "颜色", "X / mm", "Y / mm", "原始像素"])
+        super().__init__(0, 5)
+        self.setHorizontalHeaderLabels(["点位", "颜色", "X / mm", "Y / mm", "图片像素"])
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.setAlternatingRowColors(True)
+        self.verticalHeader().setVisible(False)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.itemSelectionChanged.connect(self._selection)
 
@@ -22,8 +24,9 @@ class ShotTable(QTableWidget):
         self.blockSignals(True)
         self.setRowCount(len(shots))
         for row,s in enumerate(shots):
-            values = [s.shot_id, s.shot_label, "红" if s.color == "red" else "蓝",
-                      f"{s.plane_mm[0]:.3f}", f"{s.plane_mm[1]:.3f}", f"{s.pixel_raw[0]:.2f}, {s.pixel_raw[1]:.2f}"]
+            values = [s.shot_id, "红" if s.color == "red" else "蓝",
+                      f"{s.plane_mm[0]:.3f}", f"{s.plane_mm[1]:.3f}",
+                      f"{s.pixel_raw[0]:.2f}, {s.pixel_raw[1]:.2f}"]
             for col,v in enumerate(values):
                 self.setItem(row,col,QTableWidgetItem(str(v)))
             if s.shot_id == selected:
