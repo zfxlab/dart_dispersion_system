@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox, QGraphicsPolygonItem
 
 from test_core import scene
 from test_service import service
@@ -49,11 +49,15 @@ def test_three_page_workflow_actions(window):
     assert [bar.windowTitle() for bar in w.toolbars] == ["① 标定", "② 图片选点", "③ 散布结果"]
     labels = {action.text() for bar in w.toolbars for action in bar.actions()}
     assert {
-        "1  导入标定照片", "4  检测并完成标定", "加载项目测量",
-        "保存 results.json", "刷新散布结果",
+        "1  导入标定照片", "4  检测并完成标定", "扫描项目图片",
+        "保存 results.json", "刷新显示",
     } <= labels
     assert w.tabs.cornerWidget(Qt.Corner.TopRightCorner) is w.project_corner
-    assert w.project_button.text() == "选择项目"
+    assert w.project_corner.isVisible()
+    assert w.project_button.text() == "切换项目"
+    assert w.calibration_page.layout().count() == 2
+    assert w.picking_page.layout().count() == 2
+    assert w.results_page.layout().count() == 2
     assert w.open_selection_action.isEnabled()
     assert w.tabs.isTabEnabled(1)
     assert not w.tabs.isTabEnabled(2)
@@ -64,22 +68,30 @@ def test_three_page_workflow_actions(window):
     assert w.results_splitter.count() == 2
     assert w.table.isHidden()
     assert not w.plane_view._point_editing_enabled
+    assert sum(
+        isinstance(item, QGraphicsPolygonItem)
+        for item in w.plane_view.scene().items()
+    ) >= len(w.service.layout.tags)
 
 
 def test_calibration_page_banner_and_saved_markers(window, app):
     w, _ = window
     app.processEvents()
     assert w.calibration_banner.height() < w.calibration_page.height() / 4
-    assert "检测 Tag 4（参与标定 4）" in w.calibration_banner.text()
+    assert "质量良好" in w.calibration_banner.text()
+    assert "检测 Tag 4（参与标定 4）" in w.calibration_banner.toolTip()
     # The fixture has a mapper and detections. Clear the live detections to
     # exercise the same reconstruction path used by "加载已有标定".
     w.service.detections = []
     w._calibration_detections = []
     w.refresh(fit=True)
     app.processEvents()
-    assert "检测 Tag 4（参与标定 4）" in w.calibration_banner.text()
-    # Image pixmap + valid polygon + 4 tag polygons + 4 tag labels +
-    # 16 corner/label pairs.
+    assert "检测 Tag 4（参与标定 4）" in w.calibration_banner.toolTip()
+    # Compact mode: image + valid polygon + four Tag polygons.
+    assert len(w.calibration_image_view.scene().items()) == 6
+    w.calibration_details_action.setChecked(True)
+    w._refresh_calibration_page()
+    # Details add four Tag labels and sixteen corner/label pairs.
     assert len(w.calibration_image_view.scene().items()) == 42
 
 
@@ -109,10 +121,11 @@ def test_project_auto_loads_fixed_calibration_files(window, tmp_path):
     assert w.service.mapper is not None
     assert w.service.session.calibration_file == str(project.plane_calibration.resolve())
     assert w.project_label.text() == "项目：automatic_project"
-    assert "标定有效" in w.calibration_banner.text()
+    assert w.calibration_ready_button.text() == "准备 4/4"
+    assert "标定有效" in w.calibration_banner.toolTip()
     w.workflow_stage = "picking"
     w.refresh()
-    assert "检测 Tag 4（参与标定 4）" in w.calibration_banner.text()
+    assert "检测 Tag 4（参与标定 4）" in w.calibration_banner.toolTip()
 
 
 def test_folder_selection_autosaves_results(window,app,tmp_path,monkeypatch):
@@ -176,7 +189,7 @@ def test_picking_page_uses_active_trajectory_overlay(window, tmp_path, monkeypat
     assert manifest["run_id"] in str(w._selection_preview_path)
     assert w.service.session.image_file == str((dart / "1.png").resolve())
     assert w.enhanced_display_action.isEnabled()
-    assert "显示：增强图" in w.picking_banner.text()
+    assert "增强图" in w.picking_banner.text()
 
 
 def test_click_zoom_edit_undo_restore(window,app,tmp_path):

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QFileDialog, QHeaderView, QLabel, QMainWindow,
     QMessageBox, QSplitter, QTabWidget, QToolBar, QTreeWidget,
     QTreeWidgetItem, QVBoxLayout, QHBoxLayout, QFormLayout, QDoubleSpinBox,
-    QPushButton, QWidget, QSizePolicy,
+    QPushButton, QWidget, QSizePolicy, QToolButton, QMenu,
 )
 
 from ..measurement_batch import MeasurementBatch
@@ -91,7 +91,7 @@ class MainWindow(QMainWindow):
         self.project = None
         self.pool = QThreadPool(self)
 
-        self.setWindowTitle("飞行物平面标定与散布分析")
+        self.setWindowTitle("飞镖平面标定与散布分析")
         self.resize(1500, 920)
         self._build_pages()
         self._build_actions()
@@ -109,15 +109,27 @@ class MainWindow(QMainWindow):
         action = QAction(text, self)
         if shortcut:
             action.setShortcut(shortcut)
+            action.setToolTip(f"{text}（{shortcut}）")
+        else:
+            action.setToolTip(text)
         action.triggered.connect(lambda _=False: self.safe(handler))
         toolbar.addAction(action)
         return action
+
+    def _add_toolbar_tail(self, toolbar, *widgets):
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        toolbar.addWidget(spacer)
+        for widget in widgets:
+            toolbar.addWidget(widget)
 
     def _panel(self, title, view):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(QLabel(title))
+        title_label = QLabel(title)
+        title_label.setStyleSheet("font-weight: 600; padding: 2px 0;")
+        layout.addWidget(title_label)
         layout.addWidget(view)
         return panel
 
@@ -127,13 +139,26 @@ class MainWindow(QMainWindow):
         self.tabs.currentChanged.connect(self._tab_changed)
         self.project_corner = QWidget()
         project_layout = QHBoxLayout(self.project_corner)
-        project_layout.setContentsMargins(4, 0, 4, 0)
+        project_layout.setContentsMargins(3, 0, 3, 0)
         project_layout.setSpacing(6)
         self.project_label = QLabel("项目：未选择")
-        self.project_label.setMaximumWidth(360)
-        self.project_button = QPushButton("选择项目")
+        self.project_label.setStyleSheet("font-weight: 600;")
+        self.project_label.setMaximumWidth(230)
+        self.project_status_label = QLabel("标定○ · 0/0")
+        self.project_status_label.setStyleSheet("color: #52647a;")
+        self.project_button = QToolButton()
+        self.project_button.setText("选择项目")
+        self.project_button.setToolTip("选择或切换飞镖项目文件夹")
+        self.project_button.setAutoRaise(False)
+        self.project_button.setStyleSheet(
+            "QToolButton { border: 1px solid #b8c2ce; border-radius: 3px; "
+            "padding: 2px 8px; background: #f7f9fb; }"
+            "QToolButton:hover { background: #e6edf5; }"
+            "QToolButton:pressed { background: #d9e3ee; }"
+        )
         self.project_button.clicked.connect(lambda: self.safe(self.select_project))
         project_layout.addWidget(self.project_label)
+        project_layout.addWidget(self.project_status_label)
         project_layout.addWidget(self.project_button)
         self.tabs.setCornerWidget(self.project_corner, Qt.Corner.TopRightCorner)
         self.setCentralWidget(self.tabs)
@@ -142,12 +167,8 @@ class MainWindow(QMainWindow):
         calibration_layout = QVBoxLayout(self.calibration_page)
         self.calibration_toolbar = QToolBar("① 标定")
         calibration_layout.addWidget(self.calibration_toolbar)
-        self.calibration_banner = QLabel()
-        self.calibration_banner.setWordWrap(True)
-        self.calibration_banner.setSizePolicy(
-            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum,
-        )
-        calibration_layout.addWidget(self.calibration_banner)
+        self.calibration_banner = QLabel("准备中")
+        self.calibration_banner.setToolTip("标定状态")
         self.calibration_image_view = ImageView()
         self.calibration_plane_view = PlaneView()
         calibration_split = QSplitter()
@@ -167,15 +188,10 @@ class MainWindow(QMainWindow):
         picking_layout = QVBoxLayout(self.picking_page)
         self.picking_toolbar = QToolBar("② 图片选点")
         picking_layout.addWidget(self.picking_toolbar)
-        self.picking_banner = QLabel()
-        self.picking_banner.setWordWrap(True)
-        self.picking_banner.setSizePolicy(
-            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum,
-        )
-        picking_layout.addWidget(self.picking_banner)
+        self.picking_banner = QLabel("等待扫描项目图片")
 
         self.measurement_tree = QTreeWidget()
-        self.measurement_tree.setHeaderLabels(["飞行物 / 测量", "状态"])
+        self.measurement_tree.setHeaderLabels(["飞镖 / 图片", "状态"])
         self.measurement_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.measurement_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.measurement_tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -194,13 +210,24 @@ class MainWindow(QMainWindow):
         self.table.setParent(self.picking_page)
         self.table.hide()
 
+        self.picking_current_label = QLabel("当前：未选择图片")
+        self.picking_current_label.setWordWrap(True)
+        self.picking_current_label.setStyleSheet(
+            "padding: 5px 7px; background: #eef3f8; color: #35465d;"
+        )
+        measurement_panel = QWidget()
+        measurement_layout = QVBoxLayout(measurement_panel)
+        measurement_layout.setContentsMargins(0, 0, 0, 0)
+        measurement_title = QLabel("飞镖图片 · 选择需要处理的次数")
+        measurement_title.setStyleSheet("font-weight: 600; padding: 2px 0;")
+        measurement_layout.addWidget(measurement_title)
+        measurement_layout.addWidget(self.picking_current_label)
+        measurement_layout.addWidget(self.measurement_tree)
+
         self.picking_sidebar = QSplitter(Qt.Orientation.Vertical)
+        self.picking_sidebar.addWidget(measurement_panel)
         self.picking_sidebar.addWidget(self._panel(
-            "测量文件夹 · 选择需要处理的图片",
-            self.measurement_tree,
-        ))
-        self.picking_sidebar.addWidget(self._panel(
-            "布局坐标预览 · 红色当前点 / 蓝色其他测量",
+            "布局坐标预览 · 红色当前点 / 蓝色其他次数",
             self.plane_view,
         ))
         self.picking_sidebar.setSizes([430, 330])
@@ -222,15 +249,10 @@ class MainWindow(QMainWindow):
         results_layout = QVBoxLayout(self.results_page)
         self.results_toolbar = QToolBar("③ 散布结果")
         results_layout.addWidget(self.results_toolbar)
-        self.results_banner = QLabel()
-        self.results_banner.setWordWrap(True)
-        self.results_banner.setSizePolicy(
-            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum,
-        )
-        results_layout.addWidget(self.results_banner)
+        self.results_banner = QLabel("尚无落点")
         self.dispersion_view = DispersionView()
         self.result_tree = QTreeWidget()
-        self.result_tree.setHeaderLabels(["飞镖", "完成", "散布范围 / mm"])
+        self.result_tree.setHeaderLabels(["显示 / 飞镖", "落点数", "X 向 × Y 向 / mm"])
         self.result_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.result_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.result_tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -256,6 +278,15 @@ class MainWindow(QMainWindow):
         self.result_rotation_spin.setSuffix(" °")
         self.result_rotation_spin.setValue(self.default_result_rotation_deg)
         self.result_rotation_spin.setToolTip("逆时针为正；只旋转结果坐标，不修改标定数据")
+        rotation_buttons = QWidget()
+        rotation_buttons_layout = QHBoxLayout(rotation_buttons)
+        rotation_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        for text, angle in (("-90°", -90.0), ("0°", 0.0), ("+90°", 90.0), ("180°", 180.0)):
+            button = QPushButton(text)
+            button.clicked.connect(
+                lambda _=False, value=angle: self.result_rotation_spin.setValue(value)
+            )
+            rotation_buttons_layout.addWidget(button)
         self.impact_radius_spin = QDoubleSpinBox()
         self.impact_radius_spin.setRange(0.1, 1000.0)
         self.impact_radius_spin.setDecimals(1)
@@ -263,10 +294,20 @@ class MainWindow(QMainWindow):
         self.impact_radius_spin.setSuffix(" mm")
         self.impact_radius_spin.setValue(self.default_impact_radius_mm)
         settings_layout.addRow("结果旋转（逆时针）", self.result_rotation_spin)
-        settings_layout.addRow("落点圆半径", self.impact_radius_spin)
+        settings_layout.addRow("快捷方向", rotation_buttons)
+        settings_layout.addRow("允许误差半径", self.impact_radius_spin)
 
         self.result_region_label = QLabel("当前飞镖：未选择")
         self.result_region_label.setWordWrap(True)
+        self.result_selection_help = QLabel("勾选控制显示；选中行决定当前编辑的飞镖。")
+        self.result_selection_help.setWordWrap(True)
+        self.result_selection_help.setStyleSheet("color: #66778c;")
+        self.region_mode_label = QLabel("正在框选：在右侧拖动绘制矩形，按 Esc 取消。")
+        self.region_mode_label.setWordWrap(True)
+        self.region_mode_label.setStyleSheet(
+            "padding: 7px; background: #fff0c7; color: #704f00; font-weight: 600;"
+        )
+        self.region_mode_label.hide()
         self.draw_region_button = QPushButton("框选当前飞镖散布范围")
         self.draw_region_button.setCheckable(True)
         self.clear_region_button = QPushButton("清除当前范围")
@@ -275,11 +316,13 @@ class MainWindow(QMainWindow):
         sidebar_layout = QVBoxLayout(results_sidebar)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.addWidget(QLabel("选择需要显示的飞镖"))
+        sidebar_layout.addWidget(self.result_selection_help)
         sidebar_layout.addWidget(self.result_tree, 1)
         sidebar_layout.addWidget(select_buttons)
         sidebar_layout.addWidget(QLabel("结果坐标与落点范围"))
         sidebar_layout.addWidget(settings)
         sidebar_layout.addWidget(self.result_region_label)
+        sidebar_layout.addWidget(self.region_mode_label)
         sidebar_layout.addWidget(self.draw_region_button)
         sidebar_layout.addWidget(self.clear_region_button)
 
@@ -312,33 +355,28 @@ class MainWindow(QMainWindow):
         self.calibrate_action = self._action(
             self.calibration_toolbar, "4  检测并完成标定", self.calibrate,
         )
+        self.calibration_toolbar.addSeparator()
         self.load_calibration_action = self._action(
             self.calibration_toolbar, "导入已有标定", self.load_calibration,
         )
         self.save_calibration_action = self._action(
             self.calibration_toolbar, "保存标定", self.save_calibration,
         )
+        self.calibration_toolbar.addSeparator()
+        self.calibration_details_action = QAction("显示 Tag 角点详情", self)
+        self.calibration_details_action.setCheckable(True)
+        self.calibration_details_action.setChecked(False)
+        self.calibration_details_action.setToolTip("25 Tag 布局较密时，可关闭 ID 和角点编号")
+        self.calibration_details_action.triggered.connect(
+            lambda _=False: self.safe(lambda: self._refresh_calibration_page())
+        )
+        self.calibration_toolbar.addAction(self.calibration_details_action)
 
         self.open_selection_action = self._action(
-            self.picking_toolbar, "加载项目测量", self.open_measurement_folder, "Ctrl+Shift+O",
+            self.picking_toolbar, "扫描项目图片", self.open_measurement_folder, "Ctrl+Shift+O",
         )
         self.refresh_folder_action = self._action(
             self.picking_toolbar, "刷新文件夹", self.refresh_measurement_folder,
-        )
-        self.next_action = self._action(
-            self.picking_toolbar, "下一个未完成", self.next_measurement,
-        )
-        self.undo_action = self._action(
-            self.picking_toolbar, "撤销", self.undo_point, "Ctrl+Z",
-        )
-        self.delete_action = self._action(
-            self.picking_toolbar, "删除当前点", self.delete_current_point, "Delete",
-        )
-        self.fit_action = self._action(
-            self.picking_toolbar, "适配两视图", self.fit_views, "F",
-        )
-        self.save_results_action = self._action(
-            self.picking_toolbar, "保存 results.json", self.save_results, "Ctrl+S",
         )
         self.process_trajectory_action = self._action(
             self.picking_toolbar, "批量增强轨迹", self.process_trajectories,
@@ -346,16 +384,67 @@ class MainWindow(QMainWindow):
         self.enhanced_display_action = QAction("显示增强图", self)
         self.enhanced_display_action.setCheckable(True)
         self.enhanced_display_action.setChecked(True)
+        self.enhanced_display_action.setToolTip("在原图和最新轨迹增强图之间切换")
         self.enhanced_display_action.triggered.connect(
             lambda _=False: self.safe(self.toggle_selection_preview)
         )
         self.picking_toolbar.addAction(self.enhanced_display_action)
+        self.picking_toolbar.addSeparator()
+        self.next_action = self._action(
+            self.picking_toolbar, "下一个未完成", self.next_measurement,
+        )
+        self.picking_toolbar.addSeparator()
+        self.undo_action = self._action(
+            self.picking_toolbar, "撤销", self.undo_point, "Ctrl+Z",
+        )
+        self.delete_action = self._action(
+            self.picking_toolbar, "删除当前点", self.delete_current_point, "Delete",
+        )
+        self.picking_toolbar.addSeparator()
+        self.fit_action = self._action(
+            self.picking_toolbar, "适配两视图", self.fit_views, "F",
+        )
+        self.save_results_action = self._action(
+            self.picking_toolbar, "保存 results.json", self.save_results, "Ctrl+S",
+        )
         self.results_refresh_action = self._action(
-            self.results_toolbar, "刷新散布结果", self.update_results,
+            self.results_toolbar, "刷新显示", self.update_results,
         )
         self.results_fit_action = self._action(
             self.results_toolbar, "适配散布图", self.dispersion_view.fit_all,
         )
+        self.cancel_region_action = QAction("取消框选", self)
+        self.cancel_region_action.setShortcut("Esc")
+        self.cancel_region_action.triggered.connect(
+            lambda: self.draw_region_button.setChecked(False)
+        )
+        self.addAction(self.cancel_region_action)
+
+        self.calibration_ready_button = QToolButton()
+        self.calibration_ready_button.setText("准备 0/4")
+        self.calibration_ready_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.calibration_ready_menu = QMenu(self.calibration_ready_button)
+        self.calibration_file_actions = {}
+        for label, key in (
+            ("标定照片", "calibration_image"),
+            ("相机内参", "camera_intrinsics"),
+            ("Tag 布局", "tag_layout"),
+            ("平面标定", "plane_calibration"),
+        ):
+            action = self.calibration_ready_menu.addAction(f"○ {label}")
+            action.setEnabled(False)
+            self.calibration_file_actions[key] = (label, action)
+        self.calibration_ready_button.setMenu(self.calibration_ready_menu)
+        self.calibration_banner.setMaximumWidth(520)
+        self.picking_banner.setMaximumWidth(330)
+        self.results_banner.setMaximumWidth(330)
+        self._add_toolbar_tail(
+            self.calibration_toolbar,
+            self.calibration_ready_button,
+            self.calibration_banner,
+        )
+        self._add_toolbar_tail(self.picking_toolbar, self.picking_banner)
+        self._add_toolbar_tail(self.results_toolbar, self.results_banner)
 
         # Kept for the coordinate adapter and backwards-compatible tests.
         self.debug_action = QAction(self)
@@ -413,7 +502,7 @@ class MainWindow(QMainWindow):
 
     def _require_project(self):
         if self.project is None:
-            raise ValueError("请先在页面标签栏右侧选择项目文件夹")
+            raise ValueError("请先在顶部项目栏选择项目文件夹")
         return self.project
 
     def select_project(self):
@@ -471,12 +560,12 @@ class MainWindow(QMainWindow):
                 MeasurementBatch.scan(project.root)
             except ValueError as exc:
                 if "未找到" not in str(exc):
-                    errors.append(f"测量目录：{exc}")
+                    errors.append(f"飞镖图片目录：{exc}")
             else:
                 try:
                     self._load_batch(project.root)
                 except Exception as exc:
-                    errors.append(f"测量结果：{exc}")
+                    errors.append(f"飞镖结果：{exc}")
         if errors:
             raise ValueError("项目部分内容未能加载：\n" + "\n".join(errors))
 
@@ -624,7 +713,7 @@ class MainWindow(QMainWindow):
 
     def refresh_measurement_folder(self):
         if self.batch is None:
-            raise ValueError("请先打开测量文件夹")
+            raise ValueError("请先扫描项目图片")
         self.save_results()
         key = self.current_measurement.key if self.current_measurement else None
         self._load_batch(self.batch.root, key)
@@ -740,7 +829,7 @@ class MainWindow(QMainWindow):
 
     def next_measurement(self):
         if self.batch is None:
-            raise ValueError("请先打开测量文件夹")
+            raise ValueError("请先扫描项目图片")
         measurement = self.batch.next_incomplete(self.current_measurement)
         if measurement is None:
             QMessageBox.information(self, "选点完成", "所有图片都已经完成选点。")
@@ -767,7 +856,7 @@ class MainWindow(QMainWindow):
 
     def save_results(self):
         if self.batch is None:
-            raise ValueError("尚未打开测量文件夹")
+            raise ValueError("尚未扫描项目图片")
         self.batch.save(self.service.session.calibration_id)
         self.statusBar().showMessage(f"已保存 {self.batch.results_path}")
 
@@ -947,8 +1036,8 @@ class MainWindow(QMainWindow):
         else:
             self.result_region_label.setText(
                 f"当前飞镖：{object_id}\n"
-                f'散布范围：长 {region["width_mm"]:.1f} mm × '
-                f'宽 {region["height_mm"]:.1f} mm'
+                f'散布范围：X 向 {region["width_mm"]:.1f} mm × '
+                f'Y 向 {region["height_mm"]:.1f} mm'
             )
 
     def _result_visibility_changed(self, _item=None, _column=0):
@@ -991,6 +1080,7 @@ class MainWindow(QMainWindow):
         self.batch.impact_radius_mm = self.impact_radius_spin.value()
         self.batch.save(self.service.session.calibration_id)
         self._draw_results()
+        QTimer.singleShot(0, self.dispersion_view.fit_all)
 
     def _toggle_region_drawing(self, checked):
         if checked:
@@ -1001,9 +1091,11 @@ class MainWindow(QMainWindow):
             if item is not None and item.checkState(0) != Qt.CheckState.Checked:
                 item.setCheckState(0, Qt.CheckState.Checked)
             self.draw_region_button.setText("在右侧拖动框选（点击取消）")
+            self.region_mode_label.show()
             self.dispersion_view.start_region_selection()
         else:
             self.draw_region_button.setText("框选当前飞镖散布范围")
+            self.region_mode_label.hide()
             self.dispersion_view.cancel_region_selection()
 
     def _accept_dispersion_region(self, x, y, width, height):
@@ -1046,7 +1138,10 @@ class MainWindow(QMainWindow):
         total = len(self._result_items)
         rotation = self.batch.result_rotation_deg if self.batch else self.default_result_rotation_deg
         self.results_banner.setText(
-            f"已完成 {total} 个飞镖、{complete} 次测量；当前显示 {visible} 个。"
+            f"显示 {visible}/{total} · {complete} 个落点 · {rotation:.1f}°"
+        )
+        self.results_banner.setToolTip(
+            f"已完成 {total} 个飞镖、{complete} 个落点；当前显示 {visible} 个。\n"
             f"结果坐标相对标定平面逆时针旋转 {rotation:.1f}°。"
         )
 
@@ -1098,6 +1193,26 @@ class MainWindow(QMainWindow):
         self.tabs.setTabEnabled(1, has_mapping)
         self.tabs.setTabEnabled(2, complete)
 
+    def _update_project_summary(self):
+        if self.project is None:
+            self.project_label.setText("项目：未选择")
+            self.project_label.setToolTip("")
+            self.project_status_label.setText("标定○ · 0/0")
+            self.project_status_label.setToolTip("尚未选择项目")
+            self.project_button.setText("选择项目")
+            return
+        self.project_label.setText(f"项目：{self.project.root.name}")
+        self.project_label.setToolTip(str(self.project.root))
+        self.project_button.setText("切换项目")
+        objects = len(self.batch.objects) if self.batch else 0
+        done, total = self.batch.progress() if self.batch else (0, 0)
+        calibration = "✓" if self.service.mapper is not None else "○"
+        self.project_status_label.setText(f"标定{calibration} · {done}/{total}")
+        self.project_status_label.setToolTip(
+            f"标定：{'有效' if self.service.mapper is not None else '未就绪'}\n"
+            f"飞镖：{objects}\n落点进度：{done}/{total}"
+        )
+
     def _refresh_calibration_page(self, fit=False):
         service = self.service
         image = self._calibration_image if self._calibration_image is not None else service.image
@@ -1108,20 +1223,36 @@ class MainWindow(QMainWindow):
             or service.display_detections()
         )
         self.calibration_image_view.draw_valid_region(service.mapper, False)
-        self.calibration_image_view.draw_tags(detections, service.mapper, False)
+        self.calibration_image_view.draw_tags(
+            detections, service.mapper, False,
+            self.calibration_details_action.isChecked(),
+        )
         self.calibration_plane_view.draw(
             service.layout, service.mapper, [], None, self.grid_mm, None,
         )
         if service.mapper:
             calibration = service.mapper.calibration
+            quality_ok = (
+                calibration.image_reprojection_rms_px <= self._ransac_threshold_px
+                and calibration.plane_mapping_rms_mm <= self._ransac_threshold_mm
+            )
             text = (
-                f"标定有效 · 检测 Tag {len(detections)}（参与标定 "
+                f"标定有效 · 拟合质量：{'良好' if quality_ok else '需检查'} · "
+                f"检测 Tag {len(detections)}（参与标定 "
                 f"{len(calibration.detected_tag_ids)}） · "
                 f"内点 {calibration.inlier_count}/{len(calibration.inlier_mask)} · "
-                f"RMS {calibration.image_reprojection_rms_px:.3f} px / "
+                f"RMS {calibration.image_reprojection_rms_px:.3f} px"
+                f"（阈值 {self._ransac_threshold_px:g}） / "
                 f"{calibration.plane_mapping_rms_mm:.3f} mm"
+                f"（阈值 {self._ransac_threshold_mm:g}）"
             )
-            color = "#173b32; color: #9ff0d0"
+            compact_text = (
+                f"{'质量良好' if quality_ok else '需检查'} · "
+                f"{calibration.inlier_count}/{len(calibration.inlier_mask)} · "
+                f"{calibration.image_reprojection_rms_px:.2f} px / "
+                f"{calibration.plane_mapping_rms_mm:.2f} mm"
+            )
+            color = "#187653" if quality_ok else "#a26312"
         else:
             missing = []
             if service.image is None:
@@ -1131,18 +1262,26 @@ class MainWindow(QMainWindow):
             if service.layout is None:
                 missing.append("Tag 布局")
             text = "准备标定" + (" · 还需 " + "、".join(missing) if missing else " · 可以开始检测")
-            color = "#3e3420; color: #ffe39b"
+            compact_text = "还需：" + "、".join(missing) if missing else "可以开始标定"
+            color = "#a26312"
         if self.project is None:
-            text = "请先在页面标签栏右侧选择项目文件夹"
-            color = "#3e3420; color: #ffe39b"
+            text = "请先在顶部选择项目文件夹"
+            compact_text = "请先选择项目"
+            color = "#a26312"
+            status = {
+                "calibration_image": False, "camera_intrinsics": False,
+                "tag_layout": False, "plane_calibration": False,
+            }
         else:
             status = self.project.status()
-            text += (
-                f" · 项目 {self.project.root.name} · "
-                f"背景 {status['background_count']} 张"
-            )
-        self.calibration_banner.setText(text)
-        self.calibration_banner.setStyleSheet(f"padding: 10px; background: {color};")
+        ready = sum(bool(status[key]) for key in self.calibration_file_actions)
+        self.calibration_ready_button.setText(f"准备 {ready}/4")
+        self.calibration_ready_button.setToolTip("点击查看标定文件准备情况")
+        for key, (label, action) in self.calibration_file_actions.items():
+            action.setText(f"{'✓' if status[key] else '○'} {label}")
+        self.calibration_banner.setText(compact_text)
+        self.calibration_banner.setToolTip(text)
+        self.calibration_banner.setStyleSheet(f"padding: 2px 6px; color: {color};")
         if fit:
             self.calibration_image_view.fit_all()
             self.calibration_plane_view.fit_all()
@@ -1177,29 +1316,44 @@ class MainWindow(QMainWindow):
                 f"{self.current_measurement.object_id} / 第 {self.current_measurement.trial} 次"
                 if self.current_measurement else "未选择图片"
             )
+            display = (
+                "增强图"
+                if self.enhanced_display_action.isChecked() and self._selection_preview is not None
+                else "原图"
+            )
+            self.picking_current_label.setText(f"当前：{current}")
+            self.picking_current_label.setToolTip(str(self.batch.root))
             self.picking_banner.setText(
-                f"{self.batch.root} · 当前：{current} · 进度 {done}/{total} · "
-                f"显示：{'增强图' if self.enhanced_display_action.isChecked() and self._selection_preview is not None else '原图'} · "
-                "选点变化会自动保存到 results.json"
-                + (f" · 警告：{self._preview_warning}" if self._preview_warning else "")
+                f"{done}/{total} · {display} · "
+                + ("⚠ 增强图异常" if self._preview_warning else "✓ 已保存")
+            )
+            self.picking_banner.setToolTip(
+                f"当前：{current}\n进度：{done}/{total}\n图像：{display}\n"
+                + (f"警告：{self._preview_warning}" if self._preview_warning else "选点变化会自动保存")
             )
             self.picking_banner.setStyleSheet(
-                "padding: 10px; background: #173b32; color: #9ff0d0;"
+                f"padding: 2px 6px; color: {'#a26312' if self._preview_warning else '#187653'};"
             )
         else:
-            self.picking_banner.setText(
-                "完成标定后，打开测量根目录。一级文件夹名作为飞行物 ID，"
-                "其中 1、2、3… 图片代表不同次测量。"
+            self.picking_current_label.setText("当前：未选择图片")
+            self.picking_current_label.setToolTip("")
+            self.picking_banner.setText("等待扫描项目图片")
+            self.picking_banner.setToolTip(
+                "完成标定后扫描项目图片；一级文件夹名作为飞镖 ID。"
             )
-            self.picking_banner.setStyleSheet(
-                "padding: 10px; background: #20354f; color: #b9d8ff;"
-            )
+            self.picking_banner.setStyleSheet("padding: 2px 6px; color: #52647a;")
         self.update_results()
         self.update_action_states()
+        self._update_project_summary()
         if fit:
             self.fit_views()
         self._status_summary = self.picking_banner.text()
-        self.statusBar().showMessage(self._status_summary)
+        if self.tabs.currentWidget() is self.calibration_page:
+            self.statusBar().showMessage(self.calibration_banner.text())
+        elif self.tabs.currentWidget() is self.results_page:
+            self.statusBar().showMessage(self.results_banner.text())
+        else:
+            self.statusBar().showMessage(self._status_summary.replace("\n", " · "))
 
     def hover(self, x, y):
         if self.busy or self.service.image is None:
@@ -1218,13 +1372,17 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(str(exc))
 
     def _tab_changed(self, index):
-        if index == 1:
+        if index == 0:
+            self.statusBar().showMessage(self.calibration_banner.text())
+        elif index == 1:
             # Fit after the tab has received its final visible geometry.
             QTimer.singleShot(0, self.fit_views)
+            self.statusBar().showMessage(self.picking_banner.text().replace("\n", " · "))
         elif index == 2:
             self.update_results()
             # Wait until the horizontal splitter has received its visible size.
             QTimer.singleShot(0, self.dispersion_view.fit_all)
+            self.statusBar().showMessage(self.results_banner.text())
 
     def discard_ok(self):
         if self.batch is not None:

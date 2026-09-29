@@ -162,10 +162,10 @@ class DispersionView(NavigableView):
             )
             item.setZValue(2)
             size = f'{region["width_mm"]:.1f} × {region["height_mm"]:.1f} mm'
-            item.setToolTip(f"{object_id} 散布范围\n长 × 宽：{size}")
+            item.setToolTip(f"{object_id} 散布范围\nX 向 × Y 向：{size}")
 
         if len(bounds) == 1 and not completed:
-            self.label("尚无已完成的测量", 0, 0, "#9aabc2")
+            self.label("尚无已完成的落点", 0, 0, "#9aabc2")
             self.setSceneRect(-100, -100, 200, 200)
             return
 

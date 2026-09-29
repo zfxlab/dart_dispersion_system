@@ -152,7 +152,7 @@ class ImageView(NavigableView):
         item = self.polygon(corners, "#43d69a")
         item.setZValue(2)
 
-    def draw_tags(self, detections, mapper, undistorted=False):
+    def draw_tags(self, detections, mapper, undistorted=False, details=True):
         mask = {}
         if mapper:
             c = mapper.calibration
@@ -161,10 +161,12 @@ class ImageView(NavigableView):
         for d in detections:
             corners = mapper.camera.undistort(d.corners_raw) if undistorted and mapper else d.corners_raw
             self.polygon(corners, "#f2cc60")
-            self.label(f"Tag {d.tag_id}", *corners.mean(axis=0), "#f2cc60")
+            if details:
+                self.label(f"Tag {d.tag_id}", *corners.mean(axis=0), "#f2cc60")
             for j,p in enumerate(corners):
                 color = "#43d69a" if mask.get((d.tag_id,j)) else "#ff783e" if (d.tag_id,j) in mask else "#f2cc60"
-                self.marker(p, color, str(j))
+                if details:
+                    self.marker(p, color, str(j))
 
     def draw_shots(self, shots, undistorted=False, selected=None):
         for s in shots:

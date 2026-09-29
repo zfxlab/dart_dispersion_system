@@ -80,7 +80,7 @@ class MeasurementBatch:
     def scan(cls, root):
         root = Path(root).resolve()
         if not root.is_dir():
-            raise ValueError("测量文件夹不存在或不是目录")
+            raise ValueError("项目图片文件夹不存在或不是目录")
         measurements = []
         seen_ids = set()
         for directory in sorted(root.iterdir(), key=lambda p: p.name.casefold()):
@@ -88,7 +88,7 @@ class MeasurementBatch:
                 continue
             normalized = directory.name.casefold()
             if normalized in seen_ids:
-                raise ValueError(f"飞行物 ID 仅大小写不同：{directory.name}")
+                raise ValueError(f"飞镖 ID 仅大小写不同：{directory.name}")
             seen_ids.add(normalized)
             trials = {}
             for image in directory.iterdir():
@@ -98,14 +98,14 @@ class MeasurementBatch:
                     continue
                 trial = int(image.stem)
                 if trial in trials:
-                    raise ValueError(f"{directory.name} 的第 {trial} 次测量存在多个图片")
+                    raise ValueError(f"{directory.name} 的第 {trial} 次存在多个图片")
                 trials[trial] = image.resolve()
             measurements.extend(
                 Measurement(directory.name, trial, str(path))
                 for trial, path in sorted(trials.items())
             )
         if not measurements:
-            raise ValueError("未找到“飞行物 ID 文件夹 / 正整数图片名”结构")
+            raise ValueError("未找到“飞镖 ID 文件夹 / 正整数图片名”结构")
         return cls(root, measurements)
 
     @classmethod
@@ -160,7 +160,7 @@ class MeasurementBatch:
             trial = result.get("trial")
             key = (object_id, trial)
             if not isinstance(object_id, str) or type(trial) is not int or trial < 1:
-                raise ValueError("results.json 包含非法飞行物 ID 或测量序号")
+                raise ValueError("results.json 包含非法飞镖 ID 或图片序号")
             if key in seen:
                 raise ValueError(f"results.json 存在重复结果：{object_id}/{trial}")
             seen.add(key)
@@ -188,7 +188,7 @@ class MeasurementBatch:
     def set_result(self, key, pixel_raw, pixel_undistorted, plane_mm, timestamp=None):
         measurement = self.get(key)
         if measurement is None:
-            raise ValueError("当前测量图片已经不在文件夹中")
+            raise ValueError("当前飞镖图片已经不在文件夹中")
         measurement.set_result(pixel_raw, pixel_undistorted, plane_mm, timestamp)
 
     def clear_result(self, key):

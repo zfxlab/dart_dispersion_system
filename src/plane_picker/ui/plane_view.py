@@ -13,8 +13,8 @@ class PlaneView(NavigableView):
             for tag_id in layout.tags:
                 p = layout.corners(tag_id) * [1,-1]
                 bounds.extend(p.tolist())
+                self.polygon(p, "#71839d" if compact else "#8d9eb8", "#293648")
                 if not compact:
-                    self.polygon(p, "#8d9eb8", "#293648")
                     self.label(f"Tag {tag_id}", *p.mean(axis=0))
         if mapper:
             p = mapper.polygon * [1,-1]
